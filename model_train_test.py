@@ -99,7 +99,7 @@ def plot_predictions(test_df, y_true, y_pred, last_n=200):
     plt.legend()
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig("Prediction_vs_Actual.png")
+    plt.savefig("plots/Prediction_vs_Actual.png")
     plt.show()
 
 

@@ -13,9 +13,8 @@ import pandas as pd
 from sqlalchemy import create_engine
 import psycopg2
 
-# -------------------------
+
 # Config
-# -------------------------
 DB = {
     "host": "localhost",
     "port": 5435,
@@ -103,7 +102,6 @@ def write_features_to_postgres(df_features: pd.DataFrame, conn_str: str, table_n
             try:
                 cur.execute(f"ALTER TABLE {table_name} ADD PRIMARY KEY (date);")
             except Exception:
-                # probably already has PK
                 conn.rollback()
             try:
                 cur.execute(f"CREATE INDEX IF NOT EXISTS idx_{table_name}_date ON {table_name}(date);")
@@ -112,9 +110,6 @@ def write_features_to_postgres(df_features: pd.DataFrame, conn_str: str, table_n
         conn.commit()
 
 
-# -------------------------
-# Main
-# -------------------------
 def main():
     print("Fetching base view from Postgres...")
     base_df = fetch_base_from_postgres(CONN_STR)
