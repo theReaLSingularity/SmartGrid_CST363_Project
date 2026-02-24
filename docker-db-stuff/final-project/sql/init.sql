@@ -144,7 +144,8 @@ CREATE VIEW v_daily_model_input AS
 	FROM avg_consumption a
 		JOIN weather w USING (date)
 		JOIN calendar c USING (date);
-		-- Lee Cao
+
+-- Lee Cao
 -- Monthly avg Temperture and Energy Consumption
 SELECT 
     c.year,
@@ -178,6 +179,14 @@ FROM extremes e
 INNER JOIN weather w ON e.date = w.date
 INNER JOIN calendar c ON e.date = c.date
 ORDER BY e.consumption DESC;
+
+-- Composite index on calendar for monthly trend queries
+-- Accelerates Query 2's GROUP BY and ORDER BY on year, month
+CREATE INDEX idx_calendar_year_month ON calendar(year, month);
+
+-- Index on consumption values for finding extremes
+-- Accelerates Query 1's MAX/MIN subqueries
+CREATE INDEX idx_consumption_value ON avg_consumption(consumption);
 
 
  			-- **** REQUIRES FEATURES TABLE CREATED WITH DUCKDB: *****--
