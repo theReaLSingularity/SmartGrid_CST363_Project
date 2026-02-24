@@ -27,16 +27,27 @@
 -- docker compose up -d
 
  			-- **** Dropping tables if exist: *****
-DROP VIEW IF EXISTS v_daily_model_input;
+DROP TABLE IF EXISTS v_daily_model_input;
 DROP TABLE IF EXISTS avg_consumption;
 DROP TABLE IF EXISTS energy;
 DROP TABLE IF EXISTS weather;
-DROP TABLE IF EXISTS calendar;
+DROP TABLE IF EXISTS date_definitions;
 DROP TABLE IF EXISTS features_daily;
+DROP TABLE IF EXISTS calendar;
 
 
  			-- **** Enabling pgvector extension: *****
 CREATE EXTENSION IF NOT EXISTS vector;
+
+
+            -- **** Creating calendar table: *****
+CREATE TABLE calendar (
+	date		DATE PRIMARY KEY
+    );
+
+COPY calendar (	date)
+	FROM '/data/london_calendar.csv'
+	WITH (FORMAT CSV, HEADER);
 
 
  			-- **** Creating energy table: *****
@@ -44,7 +55,8 @@ CREATE TABLE energy (
 	household_id 		VARCHAR(50),
 	date 				DATE,
 	kwhr 				DOUBLE PRECISION,
-	PRIMARY KEY (household_id, date)
+	PRIMARY KEY (household_id, date),
+    FOREIGN KEY (date) REFERENCES calendar(date)
 );
 
 COPY energy (household_id, date, kwhr)
@@ -67,7 +79,8 @@ CREATE TABLE weather (
 	min_temp 			FLOAT,
 	precipitation		FLOAT,
 	pressure			FLOAT,
-	snow_depth			FLOAT
+	snow_depth			FLOAT,
+    FOREIGN KEY (date) REFERENCES calendar(date)
 );
 
 COPY weather (	date,
@@ -96,8 +109,8 @@ UPDATE weather
 
 
 
- 			-- **** Creating calendar table: *****
-CREATE TABLE calendar (
+ 			-- **** Creating date_definitions table: *****
+CREATE TABLE date_definitions (
 	date		DATE PRIMARY KEY,
 	dow			INTEGER,
 	day			INTEGER,
@@ -105,7 +118,8 @@ CREATE TABLE calendar (
 	year		INTEGER,
 	doy			INTEGER,
 	is_weekend	INTEGER,
-	is_holiday	INTEGER
+	is_holiday	INTEGER,
+    FOREIGN KEY (date) REFERENCES calendar(date)
 );
 
 COPY calendar (	date,
@@ -123,7 +137,8 @@ COPY calendar (	date,
  			-- **** Creating table of averaged kWh per day energy consumption: *****--
 CREATE TABLE avg_consumption (
 	date			DATE PRIMARY KEY,
-	consumption 	NUMERIC(7,4)
+	consumption 	NUMERIC(7,4),
+    FOREIGN KEY (date) REFERENCES calendar(date)
 );
 
 INSERT INTO avg_consumption
@@ -132,8 +147,8 @@ INSERT INTO avg_consumption
 			GROUP BY date;
 
 
- 			-- **** Creating view for DuckDB Feature creation: *****--
-CREATE VIEW v_daily_model_input AS
+ 			-- **** Creating table for DuckDB Feature creation: *****--
+CREATE TABLE v_daily_model_input AS
 	SELECT
 		a.date,
 		a.consumption,
@@ -144,6 +159,68 @@ CREATE VIEW v_daily_model_input AS
 	FROM avg_consumption a
 		JOIN weather w USING (date)
 		JOIN calendar c USING (date);
+
+ALTER TABLE v_daily_model_input ADD PRIMARY KEY (date);
+ALTER TABLE v_daily_model_input ADD FOREIGN KEY (date) REFERENCES calendar(date) ON DELETE CASCADE;
+
+        -- **** Creating table features_daily in Postgres for assignment grading purposes: *****--
+CREATE TABLE features_daily AS
+ WITH base AS (
+   SELECT *
+   FROM v_daily_model_input
+   ORDER BY date
+ ),
+ feat AS (
+   SELECT
+     date,
+
+     -- target + base signal
+     consumption,
+     LEAD(consumption, 1) OVER (ORDER BY date) AS y_next,
+
+     -- lags
+     LAG(consumption, 1) OVER (ORDER BY date) AS lag_1,
+     LAG(consumption, 2) OVER (ORDER BY date) AS lag_2,
+     LAG(consumption, 7) OVER (ORDER BY date) AS lag_7,
+
+     -- rolling means
+     AVG(consumption) OVER (ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)  AS rm_7,
+     AVG(consumption) OVER (ORDER BY date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW) AS rm_14,
+     AVG(consumption) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS rm_30,
+
+     -- rolling stddev (volatility)
+     STDDEV_SAMP(consumption) OVER (ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)  AS rs_7,
+     STDDEV_SAMP(consumption) OVER (ORDER BY date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW) AS rs_14,
+
+     -- deltas
+     consumption - LAG(consumption, 1) OVER (ORDER BY date) AS delta_1,
+
+     -- weather + calendar inputs (already numeric)
+     cloud_cover, sunshine, global_radiation,
+     max_temp, mean_temp, min_temp,
+     precipitation, pressure, snow_depth,
+     is_weekend, is_holiday,
+	 AVG(consumption) OVER (ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)  AS dow_sin,
+     AVG(consumption) OVER (ORDER BY date ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)  AS dow_cos,
+     AVG(consumption) OVER (ORDER BY date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW) AS doy_sin,
+     AVG(consumption) OVER (ORDER BY date ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS doy_cos
+
+   FROM base
+ )
+ SELECT *
+ FROM feat
+ WHERE y_next IS NOT NULL;
+
+
+ 			-- **** REQUIRES FEATURES TABLE CREATED WITH DUCKDB: *****--
+
+ALTER TABLE features_daily ADD PRIMARY KEY (date);
+ALTER TABLE features_daily ADD FOREIGN KEY (date) REFERENCES calendar(date) ON DELETE CASCADE;
+CREATE INDEX idx_features_daily_date ON features_daily(date);
+
+-- select * from features_daily ORDER BY date;
+
+
 		-- Lee Cao
 -- Monthly avg Temperture and Energy Consumption
 SELECT 
@@ -178,11 +255,3 @@ FROM extremes e
 INNER JOIN weather w ON e.date = w.date
 INNER JOIN calendar c ON e.date = c.date
 ORDER BY e.consumption DESC;
-
-
- 			-- **** REQUIRES FEATURES TABLE CREATED WITH DUCKDB: *****--
-
--- ALTER TABLE features_daily ADD PRIMARY KEY (date);
--- CREATE INDEX IF NOT EXISTS idx_features_daily_date ON features_daily(date);
-
--- select * from features_daily ORDER BY date;
