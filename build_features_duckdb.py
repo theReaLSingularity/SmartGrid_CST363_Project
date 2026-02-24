@@ -77,9 +77,7 @@ SELECT
 FROM base;
 """
 
-# -------------------------
 # Helpers
-# -------------------------
 def fetch_base_from_postgres(conn_str: str) -> pd.DataFrame:
     """Read v_daily_model_input from Postgres into pandas."""
     engine = create_engine(conn_str)
