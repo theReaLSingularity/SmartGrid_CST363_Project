@@ -144,6 +144,40 @@ CREATE VIEW v_daily_model_input AS
 	FROM avg_consumption a
 		JOIN weather w USING (date)
 		JOIN calendar c USING (date);
+		-- Lee Cao
+-- Monthly avg Temperture and Energy Consumption
+SELECT 
+    c.year,
+    c.month,
+    ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
+    ROUND(AVG(w.mean_temp)::NUMERIC, 2) AS avg_temp
+FROM avg_consumption a
+INNER JOIN calendar c ON a.date = c.date
+INNER JOIN weather w ON a.date = w.date
+GROUP BY c.year, c.month
+ORDER BY c.year, c.month;
+
+-- Highest vs Lowest Energy Consumption 
+WITH extremes AS (
+    SELECT 'Highest' AS type, date, consumption
+    FROM avg_consumption
+    WHERE consumption = (SELECT MAX(consumption) FROM avg_consumption)
+    UNION ALL
+    SELECT 'Lowest' AS type, date, consumption
+    FROM avg_consumption
+    WHERE consumption = (SELECT MIN(consumption) FROM avg_consumption)
+)
+SELECT 
+    e.type,
+    e.date,
+    e.consumption AS avg_kwh,
+    w.mean_temp,
+    c.is_weekend,
+    c.is_holiday
+FROM extremes e
+INNER JOIN weather w ON e.date = w.date
+INNER JOIN calendar c ON e.date = c.date
+ORDER BY e.consumption DESC;
 
 
  			-- **** REQUIRES FEATURES TABLE CREATED WITH DUCKDB: *****--
