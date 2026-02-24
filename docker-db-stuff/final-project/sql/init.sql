@@ -221,7 +221,7 @@ CREATE INDEX idx_features_daily_date ON features_daily(date);
 -- select * from features_daily ORDER BY date;
 
 
-		-- Lee Cao
+-- Lee Cao
 -- Monthly avg Temperture and Energy Consumption
 SELECT 
     c.year,
@@ -255,3 +255,11 @@ FROM extremes e
 INNER JOIN weather w ON e.date = w.date
 INNER JOIN calendar c ON e.date = c.date
 ORDER BY e.consumption DESC;
+
+-- Composite index on calendar for monthly trend queries
+-- Accelerates Highest Vs Lowest Query GROUP BY and ORDER BY on year, month
+CREATE INDEX idx_calendar_year_month ON calendar(year, month);
+
+-- Index on consumption values for finding extremes
+-- Accelerates Monthly Avg's MAX/MIN subqueries
+CREATE INDEX idx_consumption_value ON avg_consumption(consumption);
