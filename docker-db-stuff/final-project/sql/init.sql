@@ -67,7 +67,9 @@ CREATE TABLE energy (
 COPY energy (household_id, date, kwhr)
 	FROM '/data/london_energy.csv'
 	WITH (FORMAT CSV, HEADER);
-
+	
+-- UPDATE: DELETE HANDLED IN PYTHON PROJECT - date_trimmer.py
+-- Leaving as is, for backward compatibility with raw data files
 DELETE FROM energy 
 	WHERE date >= '2014-02-28' -- anomalous data points on '2014-02-28'
 		OR date < '2012-01-01'; -- too few samples before '2012-01-01' (<500)
@@ -101,7 +103,9 @@ COPY weather (	date,
 				snow_depth)
 	FROM '/data/london_weather.csv'
 	WITH (FORMAT CSV, HEADER);
-	
+
+-- UPDATE: DELETE HANDLED IN PYTHON PROJECT - date_trimmer.py
+-- Leaving as is, for backward compatibility with raw data files
 DELETE FROM weather
 	WHERE date < '2012-01-01' -- limiting weather data to match available energy data date range
 		OR date > '2014-02-27';
