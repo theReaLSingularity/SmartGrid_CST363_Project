@@ -37,6 +37,11 @@ def create_london_calendar():
     # Saving calendar dataset
     df.to_csv("data/london_calendar.csv", index=False)
 
+    # Saving pure date calendar dataset
+    df = pd.DataFrame(df['date'])
+
+    df.to_csv("data/london_dates.csv", index=False)
+
 
 def main():
     create_london_calendar()

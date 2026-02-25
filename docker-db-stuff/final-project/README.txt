@@ -18,19 +18,22 @@ Follow the steps below in order:
 2. Run london_calendar_creator.py and copy generated files to sql data directory
 (OPTIONAL — only required for full data pipeline recreation.)
 
-3. Start the Docker services in 'final-project' directory: docker compose up -d
+3. Run date_trimmer.py
+(OPTIONAL — only required for full data pipeline recreation.)
+
+4. Start the Docker services in 'final-project' directory: docker compose up -d
    and allow 2-3 minutes for data to copy and tables to populate.
 
-4. Run build_features_duckdb.py
+5. Run build_features_duckdb.py
 (This creates the features table required for model training.)
 
-5. Optionally, open smart_grid_CST363.sql and uncomment the section marked:
+6. Optionally, open smart_grid_CST363.sql and uncomment the section marked:
 
 "-- **** REQUIRES FEATURES TABLE CREATED WITH DUCKDB: *****--"
 
 and run uncommented queries.
 
-6. Run model_train_test.py
+7. Run model_train_test.py
 (This will train the model and generate predictions.)
 
 Output:

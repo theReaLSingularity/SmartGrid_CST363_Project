@@ -18,7 +18,7 @@
 --     volumes:
 --       - smartgrid_pgdata:/var/lib/postgresql/data
 --       - ./data:/data
---	 - ./sql:/docker-entrypoint-initdb.d
+--	     - ./sql:/docker-entrypoint-initdb.d
 
 -- volumes:
 --   smartgrid_pgdata:
@@ -26,8 +26,10 @@
  			-- **** Running Docker compose command: *****
 -- docker compose up -d
 
+
  			-- **** Dropping tables if exist: *****
-DROP TABLE IF EXISTS v_daily_model_input;
+
+DROP VIEW IF EXISTS v_daily_model_input;
 DROP TABLE IF EXISTS avg_consumption;
 DROP TABLE IF EXISTS energy;
 DROP TABLE IF EXISTS weather;
@@ -37,20 +39,23 @@ DROP TABLE IF EXISTS calendar;
 
 
  			-- **** Enabling pgvector extension: *****
+
 CREATE EXTENSION IF NOT EXISTS vector;
 
 
             -- **** Creating calendar table: *****
+
 CREATE TABLE calendar (
 	date		DATE PRIMARY KEY
     );
 
-COPY calendar (	date)
-	FROM '/data/london_calendar.csv'
+COPY calendar (date)
+	FROM '/data/london_dates.csv'
 	WITH (FORMAT CSV, HEADER);
 
 
  			-- **** Creating energy table: *****
+
 CREATE TABLE energy (
 	household_id 		VARCHAR(50),
 	date 				DATE,
@@ -64,11 +69,12 @@ COPY energy (household_id, date, kwhr)
 	WITH (FORMAT CSV, HEADER);
 
 DELETE FROM energy 
-	WHERE date >= '2014-02-28' -- anomolous data points on '2014-02-28'
+	WHERE date >= '2014-02-28' -- anomalous data points on '2014-02-28'
 		OR date < '2012-01-01'; -- too few samples before '2012-01-01' (<500)
 
 
  			-- **** Creating weather table: *****
+
 CREATE TABLE weather (
 	date 				DATE PRIMARY KEY,
 	cloud_cover 		FLOAT,
@@ -108,8 +114,8 @@ UPDATE weather
 	WHERE date = '2012-03-02';
 
 
-
  			-- **** Creating date_definitions table: *****
+
 CREATE TABLE date_definitions (
 	date		DATE PRIMARY KEY,
 	dow			INTEGER,
@@ -122,33 +128,40 @@ CREATE TABLE date_definitions (
     FOREIGN KEY (date) REFERENCES calendar(date)
 );
 
-COPY calendar (	date,
-				dow,
-				day,
-				month,
-				year,
-				doy,
-				is_weekend,
-				is_holiday)
+CREATE INDEX idx_date_definitions_is_weekend ON date_definitions(is_weekend);
+CREATE INDEX idx_date_definitions_year_month ON date_definitions(year, month);
+
+COPY date_definitions (	date,
+                        dow,
+                        day,
+                        month,
+                        year,
+                        doy,
+                        is_weekend,
+                        is_holiday)
 	FROM '/data/london_calendar.csv'
 	WITH (FORMAT CSV, HEADER);
 
 
  			-- **** Creating table of averaged kWh per day energy consumption: *****--
+
 CREATE TABLE avg_consumption (
 	date			DATE PRIMARY KEY,
 	consumption 	NUMERIC(7,4),
     FOREIGN KEY (date) REFERENCES calendar(date)
 );
 
+CREATE INDEX idx_avg_consumption ON avg_consumption(consumption);
+
 INSERT INTO avg_consumption
 	SELECT date, AVG(kwhr)::NUMERIC(7, 4) AS consumption
-			FROM energy
-			GROUP BY date;
+        FROM energy
+        GROUP BY date;
 
 
- 			-- **** Creating table for DuckDB Feature creation: *****--
-CREATE TABLE v_daily_model_input AS
+ 			-- **** Creating view for DuckDB Feature creation: *****--
+
+CREATE VIEW v_daily_model_input AS
 	SELECT
 		a.date,
 		a.consumption,
@@ -158,12 +171,11 @@ CREATE TABLE v_daily_model_input AS
 		c.dow, c.day, c.month, c.year, c.doy, c.is_weekend, c.is_holiday
 	FROM avg_consumption a
 		JOIN weather w USING (date)
-		JOIN calendar c USING (date);
+		JOIN date_definitions c USING (date);
 
-ALTER TABLE v_daily_model_input ADD PRIMARY KEY (date);
-ALTER TABLE v_daily_model_input ADD FOREIGN KEY (date) REFERENCES calendar(date) ON DELETE CASCADE;
 
         -- **** Creating table features_daily in Postgres for assignment grading purposes: *****--
+
 CREATE TABLE features_daily AS
  WITH base AS (
    SELECT *
@@ -218,40 +230,61 @@ ALTER TABLE features_daily ADD PRIMARY KEY (date);
 ALTER TABLE features_daily ADD FOREIGN KEY (date) REFERENCES calendar(date) ON DELETE CASCADE;
 CREATE INDEX idx_features_daily_date ON features_daily(date);
 
--- select * from features_daily ORDER BY date;
 
+ 			-- **** EXAMPLE QUERIES: *****--
 
-		-- Lee Cao
--- Monthly avg Temperture and Energy Consumption
-SELECT 
-    c.year,
-    c.month,
-    ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
-    ROUND(AVG(w.mean_temp)::NUMERIC, 2) AS avg_temp
-FROM avg_consumption a
-INNER JOIN calendar c ON a.date = c.date
-INNER JOIN weather w ON a.date = w.date
-GROUP BY c.year, c.month
-ORDER BY c.year, c.month;
+-- Monthly avg Temperature and Energy Consumption Query
 
--- Highest vs Lowest Energy Consumption 
-WITH extremes AS (
-    SELECT 'Highest' AS type, date, consumption
-    FROM avg_consumption
-    WHERE consumption = (SELECT MAX(consumption) FROM avg_consumption)
-    UNION ALL
-    SELECT 'Lowest' AS type, date, consumption
-    FROM avg_consumption
-    WHERE consumption = (SELECT MIN(consumption) FROM avg_consumption)
-)
-SELECT 
-    e.type,
-    e.date,
-    e.consumption AS avg_kwh,
-    w.mean_temp,
-    c.is_weekend,
-    c.is_holiday
-FROM extremes e
-INNER JOIN weather w ON e.date = w.date
-INNER JOIN calendar c ON e.date = c.date
-ORDER BY e.consumption DESC;
+-- SELECT
+--     c.year,
+--     c.month,
+--     ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
+--     ROUND(AVG(w.mean_temp)::NUMERIC, 2) AS avg_temp
+-- FROM avg_consumption a
+--     INNER JOIN date_definitions c
+--         ON a.date = c.date
+--     INNER JOIN weather w
+--         ON a.date = w.date
+-- GROUP BY c.year, c.month
+-- ORDER BY c.year, c.month;
+
+-- Highest vs Lowest Energy Consumption Query
+
+-- WITH extremes AS (
+--     SELECT 'Highest' AS type, date, consumption
+--     FROM avg_consumption
+--     WHERE consumption = (SELECT MAX(consumption) FROM avg_consumption)
+--     UNION ALL
+--     SELECT 'Lowest' AS type, date, consumption
+--     FROM avg_consumption
+--     WHERE consumption = (SELECT MIN(consumption) FROM avg_consumption)
+-- )
+-- SELECT
+--     e.type,
+--     e.date,
+--     e.consumption AS avg_kwh,
+--     w.mean_temp,
+--     c.is_weekend,
+--     c.is_holiday
+-- FROM extremes e
+--     INNER JOIN weather w
+--         ON e.date = w.date
+--     INNER JOIN date_definitions c
+--         ON e.date = c.date
+-- ORDER BY e.consumption DESC;
+
+-- Weekday vs Weekend Energy Usage Query
+
+-- SELECT
+--     CASE
+--         WHEN c.is_weekend = 1
+--             THEN 'Weekend'
+--         ELSE 'Weekday'
+--     END AS day_type,
+--     ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
+--     COUNT(a.date) AS total_days
+-- FROM avg_consumption a
+--     INNER JOIN date_definitions c
+--         ON a.date = c.date
+-- GROUP BY day_type
+-- ORDER BY day_type;
