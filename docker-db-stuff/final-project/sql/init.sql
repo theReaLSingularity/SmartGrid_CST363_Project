@@ -235,56 +235,56 @@ CREATE INDEX idx_features_daily_date ON features_daily(date);
 
 -- Monthly avg Temperature and Energy Consumption Query
 
--- SELECT
---     c.year,
---     c.month,
---     ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
---     ROUND(AVG(w.mean_temp)::NUMERIC, 2) AS avg_temp
--- FROM avg_consumption a
---     INNER JOIN date_definitions c
---         ON a.date = c.date
---     INNER JOIN weather w
---         ON a.date = w.date
--- GROUP BY c.year, c.month
--- ORDER BY c.year, c.month;
+SELECT
+    c.year,
+    c.month,
+    ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
+    ROUND(AVG(w.mean_temp)::NUMERIC, 2) AS avg_temp
+FROM avg_consumption a
+    INNER JOIN date_definitions c
+        ON a.date = c.date
+    INNER JOIN weather w
+        ON a.date = w.date
+GROUP BY c.year, c.month
+ORDER BY c.year, c.month;
 
 -- Highest vs Lowest Energy Consumption Query
 
--- WITH extremes AS (
---     SELECT 'Highest' AS type, date, consumption
---     FROM avg_consumption
---     WHERE consumption = (SELECT MAX(consumption) FROM avg_consumption)
---     UNION ALL
---     SELECT 'Lowest' AS type, date, consumption
---     FROM avg_consumption
---     WHERE consumption = (SELECT MIN(consumption) FROM avg_consumption)
--- )
--- SELECT
---     e.type,
---     e.date,
---     e.consumption AS avg_kwh,
---     w.mean_temp,
---     c.is_weekend,
---     c.is_holiday
--- FROM extremes e
---     INNER JOIN weather w
---         ON e.date = w.date
---     INNER JOIN date_definitions c
---         ON e.date = c.date
--- ORDER BY e.consumption DESC;
+WITH extremes AS (
+    SELECT 'Highest' AS type, date, consumption
+    FROM avg_consumption
+    WHERE consumption = (SELECT MAX(consumption) FROM avg_consumption)
+    UNION ALL
+    SELECT 'Lowest' AS type, date, consumption
+    FROM avg_consumption
+    WHERE consumption = (SELECT MIN(consumption) FROM avg_consumption)
+)
+SELECT
+    e.type,
+    e.date,
+    e.consumption AS avg_kwh,
+    w.mean_temp,
+    c.is_weekend,
+    c.is_holiday
+FROM extremes e
+    INNER JOIN weather w
+        ON e.date = w.date
+    INNER JOIN date_definitions c
+        ON e.date = c.date
+ORDER BY e.consumption DESC;
 
 -- Weekday vs Weekend Energy Usage Query
 
--- SELECT
---     CASE
---         WHEN c.is_weekend = 1
---             THEN 'Weekend'
---         ELSE 'Weekday'
---     END AS day_type,
---     ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
---     COUNT(a.date) AS total_days
--- FROM avg_consumption a
---     INNER JOIN date_definitions c
---         ON a.date = c.date
--- GROUP BY day_type
--- ORDER BY day_type;
+SELECT
+    CASE
+        WHEN c.is_weekend = 1
+            THEN 'Weekend'
+        ELSE 'Weekday'
+    END AS day_type,
+    ROUND(AVG(a.consumption)::NUMERIC, 4) AS avg_consumption,
+    COUNT(a.date) AS total_days
+FROM avg_consumption a
+    INNER JOIN date_definitions c
+        ON a.date = c.date
+GROUP BY day_type
+ORDER BY day_type;
